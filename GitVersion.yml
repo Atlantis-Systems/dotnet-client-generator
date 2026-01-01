@@ -1,4 +1,9 @@
-mode: ContinuousDelivery
+mode: Mainline
+# Do not use git tags to calculate versions (derive solely from commit history/messages).
+tag-prefix: '^$'
+
+# Base version when tags are ignored.
+next-version: 1.0.0
 # Supports Conventional Commits + optional +semver overrides:
 # - feat: / feat(scope):  -> minor
 # - fix:  / fix(scope):   -> patch
