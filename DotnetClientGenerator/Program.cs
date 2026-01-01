@@ -1,50 +1,50 @@
 using System.CommandLine;
 using DotnetClientGenerator;
 
-var inputOption = new Option<string>(
-    "--input",
-    "This is the path to the OpenAPI specification file or URL")
+Option<string> inputOption = new("--input", "-i")
 {
-    IsRequired = true
-};
-inputOption.AddAlias("-i");
-
-var outputOption = new Option<string>(
-    "--output", 
-    "Output file path for the generated C# client")
-{
-    IsRequired = true
-};
-outputOption.AddAlias("-o");
-
-var classNameOption = new Option<string>(
-    "--class-name",
-    () => "ApiClient",
-    "Name of the generated client class");
-classNameOption.AddAlias("-c");
-
-var namespaceOption = new Option<string>(
-    "--namespace",
-    () => "GeneratedClient",
-    "Namespace for the generated client");
-namespaceOption.AddAlias("-n");
-
-var watchOption = new Option<bool>(
-    "--watch",
-    "Watch the input file for changes and regenerate automatically");
-watchOption.AddAlias("-w");
-
-var rootCommand = new RootCommand("A tool for generating C# API clients from OpenAPI specifications")
-{
-    inputOption,
-    outputOption,
-    classNameOption,
-    namespaceOption,
-    watchOption
+    Description = "This is the path to the OpenAPI specification file or URL",
+    Required = true
 };
 
-rootCommand.SetHandler(async (input, output, className, namespaceName, watch) =>
+Option<string> outputOption = new("--output", "-o")
 {
+    Description = "Output file path for the generated C# client",
+    Required = true
+};
+
+Option<string> classNameOption = new("--class-name", "-c")
+{
+    Description = "Name of the generated client class",
+    DefaultValueFactory = _ => "ApiClient"
+};
+
+Option<string> namespaceOption = new("--namespace", "-n")
+{
+    Description = "Namespace for the generated client",
+    DefaultValueFactory = _ => "GeneratedClient"
+};
+
+Option<bool> watchOption = new("--watch", "-w")
+{
+    Description = "Watch the input file for changes and regenerate automatically"
+};
+
+RootCommand rootCommand = new("A tool for generating C# API clients from OpenAPI specifications");
+rootCommand.Options.Add(inputOption);
+rootCommand.Options.Add(outputOption);
+rootCommand.Options.Add(classNameOption);
+rootCommand.Options.Add(namespaceOption);
+rootCommand.Options.Add(watchOption);
+
+rootCommand.SetAction(async (parseResult, _) =>
+{
+    var input = parseResult.GetValue(inputOption)!;
+    var output = parseResult.GetValue(outputOption)!;
+    var className = parseResult.GetValue(classNameOption)!;
+    var namespaceName = parseResult.GetValue(namespaceOption)!;
+    var watch = parseResult.GetValue(watchOption);
+    
     try
     {
         await GenerateClient(input, output, className, namespaceName);
@@ -53,7 +53,7 @@ rootCommand.SetHandler(async (input, output, className, namespaceName, watch) =>
         {
             Console.WriteLine($"👀 Watching {input} for changes...");
             
-            using var watcher = new FileSystemWatcher(Path.GetDirectoryName(Path.GetFullPath(input)) ?? ".", Path.GetFileName(input));
+            using FileSystemWatcher watcher = new FileSystemWatcher(Path.GetDirectoryName(Path.GetFullPath(input)) ?? ".", Path.GetFileName(input));
             watcher.Changed += async (_, _) =>
             {
                 Console.WriteLine("🔄 File changed, regenerating...");
@@ -70,9 +70,9 @@ rootCommand.SetHandler(async (input, output, className, namespaceName, watch) =>
         Console.Error.WriteLine($"❌ Error: {ex.Message}");
         Environment.Exit(1);
     }
-}, inputOption, outputOption, classNameOption, namespaceOption, watchOption);
+});
 
-return await rootCommand.InvokeAsync(args);
+return await rootCommand.Parse(args).InvokeAsync();
 
 static async Task GenerateClient(string input, string output, string className, string namespaceName)
 {
@@ -81,20 +81,21 @@ static async Task GenerateClient(string input, string output, string className, 
     Console.WriteLine($"📄 Output: {output}");
 
     Console.WriteLine("📖 Parsing OpenAPI specification...");
-    var parser = new OpenApiParser();
-    var spec = parser.ParseSpecification(input);
+    OpenApiParser parser = new();
+    ParsedApiSpec spec = await parser.ParseSpecificationAsync(input);
 
     Console.WriteLine($"🏗️  Generating code for {spec.Schemas.Count} models and {spec.Endpoints.Count} endpoints...");
-    var generator = new CSharpClientGenerator();
-    var options = new ClientGeneratorOptions
+    CSharpClientGenerator generator = new();
+    
+    ClientGeneratorOptions options = new()
     {
         ClassName = className,
         Namespace = namespaceName
     };
 
-    var clientCode = generator.GenerateClient(spec, options);
+    string clientCode = generator.GenerateClient(spec, options);
 
-var outputDir = Path.GetDirectoryName(output)!;
+    string outputDir = Path.GetDirectoryName(output)!;
     if (!string.IsNullOrEmpty(outputDir) && !Directory.Exists(outputDir))
     {
         Console.WriteLine($"📁 Creating output directory: {outputDir}");

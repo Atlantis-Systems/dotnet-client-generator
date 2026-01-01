@@ -2,6 +2,6 @@ namespace DotnetClientGenerator;
 
 public class ClientGeneratorOptions
 {
-    public string? ClassName { get; set; }
-    public string? Namespace { get; set; }
+    public string? ClassName { get; init; }
+    public string? Namespace { get; init; }
 }

@@ -1,79 +1,69 @@
-using Microsoft.OpenApi.Models;
-using Microsoft.OpenApi.Readers;
+using Microsoft.OpenApi;
+using Microsoft.OpenApi.Reader;
 
 namespace DotnetClientGenerator;
 
 public class OpenApiParser
 {
-    private static readonly System.Text.RegularExpressions.Regex OpenApi31VersionRegex = new(
-        @"""openapi""\s*:\s*""3\.1\.\d+""",
-        System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled
-    );
-
-    public ParsedApiSpec ParseSpecification(string specPath)
+    public async Task<ParsedApiSpec> ParseSpecificationAsync(string specPath)
     {
-        string specContent;
-        if (Uri.TryCreate(specPath, UriKind.Absolute, out var uri))
+        ReadResult result;
+
+        if (Uri.TryCreate(specPath, UriKind.Absolute, out var uri) && (uri.Scheme == "http" || uri.Scheme == "https"))
         {
             using var httpClient = new HttpClient();
-            specContent = httpClient.GetStringAsync(uri).Result;
+            using var stream = await httpClient.GetStreamAsync(uri);
+            result = await OpenApiDocument.LoadAsync(stream);
         }
         else
         {
-            specContent = File.ReadAllText(specPath);
+            result = await OpenApiDocument.LoadAsync(specPath);
         }
 
-        // Handle OpenAPI 3.1.x specs by temporarily converting version to 3.0.x for parsing.
-        // The Microsoft.OpenApi.Readers library versions 1.x do not officially support 3.1.x,
-        // but the structural differences are minimal enough that most specs can be parsed
-        // by treating them as 3.0.x documents.
-        // 
-        // Implementation notes:
-        // - The string check is a performance optimization to avoid regex on 3.0.x specs
-        // - The regex pattern matches both JSON and YAML formats
-        // - Some advanced OpenAPI 3.1.x features may not be fully supported (e.g., JSON Schema 2020-12)
-        // - Only performs replacement if a 3.1.x version is detected
-        if (specContent.Contains("\"openapi\"") && specContent.Contains("3.1."))
+        if (result.Document == null)
         {
-            specContent = OpenApi31VersionRegex.Replace(
-                specContent,
-                @"""openapi"": ""3.0.3"""
-            );
+            var errors = result.Diagnostic?.Errors?.Select(e => e.Message) ?? ["Unknown error"];
+            throw new InvalidOperationException($"OpenAPI parsing errors: {string.Join(", ", errors)}");
         }
 
-        var reader = new OpenApiStringReader();
-        var document = reader.Read(specContent, out var diagnostic);
-
-        if (diagnostic.Errors.Count > 0)
+        if (result.Diagnostic?.Errors?.Count > 0)
         {
-            throw new InvalidOperationException($"OpenAPI parsing errors: {string.Join(", ", diagnostic.Errors.Select(e => e.Message))}");
+            throw new InvalidOperationException($"OpenAPI parsing errors: {string.Join(", ", result.Diagnostic.Errors.Select(e => e.Message))}");
         }
 
+        var document = result.Document;
         var endpoints = new List<ApiEndpoint>();
 
-        foreach (var path in document.Paths)
+        if (document.Paths != null)
         {
-            foreach (var operation in path.Value.Operations)
+            foreach (var path in document.Paths)
             {
-                var endpoint = new ApiEndpoint
+                if (path.Value?.Operations == null) continue;
+                
+                foreach (var operation in path.Value.Operations)
                 {
-                    Path = path.Key,
-                    Method = operation.Key.ToString().ToUpper(),
-                    OperationId = operation.Value.OperationId,
-                    RequestBody = operation.Value.RequestBody,
-                    Responses = operation.Value.Responses,
-                    Tags = operation.Value.Tags?.Select(t => t.Name).ToList() ?? new List<string>(),
-                    Parameters = operation.Value.Parameters?.ToList() ?? new List<OpenApiParameter>()
-                };
-                endpoints.Add(endpoint);
+                    var endpoint = new ApiEndpoint
+                    {
+                        Path = path.Key,
+                        Method = operation.Key.ToString().ToUpper(),
+                        OperationId = operation.Value.OperationId,
+                        RequestBody = operation.Value.RequestBody as OpenApiRequestBody,
+                        Responses = operation.Value.Responses ?? new OpenApiResponses(),
+                        Parameters = operation.Value.Parameters?.ToList() ?? new List<IOpenApiParameter>()
+                    };
+                    endpoints.Add(endpoint);
+                }
             }
         }
 
         return new ParsedApiSpec
         {
-            Info = document.Info,
+            Info = document.Info ?? new OpenApiInfo(),
             Endpoints = endpoints,
-            Schemas = document.Components?.Schemas ?? new Dictionary<string, OpenApiSchema>()
+            Schemas = document.Components?.Schemas?.ToDictionary(
+                kvp => kvp.Key, 
+                kvp => kvp.Value as OpenApiSchema) 
+                ?? new Dictionary<string, OpenApiSchema?>()
         };
     }
 }
