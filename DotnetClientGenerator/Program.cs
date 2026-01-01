@@ -94,7 +94,7 @@ static async Task GenerateClient(string input, string output, string className, 
 
     var clientCode = generator.GenerateClient(spec, options);
 
-    var outputDir = Path.GetDirectoryName(output);
+var outputDir = Path.GetDirectoryName(output)!;
     if (!string.IsNullOrEmpty(outputDir) && !Directory.Exists(outputDir))
     {
         Console.WriteLine($"📁 Creating output directory: {outputDir}");
