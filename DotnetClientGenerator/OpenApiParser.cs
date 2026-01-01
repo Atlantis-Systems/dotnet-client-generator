@@ -18,6 +18,17 @@ public class OpenApiParser
             specContent = File.ReadAllText(specPath);
         }
 
+        // Handle OpenAPI 3.1.x specs by temporarily converting version to 3.0.x for parsing
+        // The Microsoft.OpenApi.Readers library versions 1.x do not officially support 3.1.x,
+        // but the structural differences are minimal enough that most specs can be parsed
+        // by treating them as 3.0.x documents
+        specContent = System.Text.RegularExpressions.Regex.Replace(
+            specContent,
+            @"""openapi""\s*:\s*""3\.1\.\d+""",
+            @"""openapi"": ""3.0.3""",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase
+        );
+
         var reader = new OpenApiStringReader();
         var document = reader.Read(specContent, out var diagnostic);
 
