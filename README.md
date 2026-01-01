@@ -155,6 +155,16 @@ dotnet pack
 
 This project uses [GitVersion](https://gitversion.net/) for semantic versioning. By default, commits to the `main` branch increment the patch version, and commits to the `develop` branch increment the minor version.
 
+### Conventional Commits (Recommended)
+
+GitVersion is configured to interpret [Conventional Commits](https://www.conventionalcommits.org/) style messages:
+
+| Commit prefix | Effect | Example |
+| --- | --- | --- |
+| `feat:` or `feat(scope):` | Increments **minor** version (e.g., 1.0.0 → 1.1.0) | `feat: add new endpoint support` |
+| `fix:` or `fix(scope):` | Increments **patch** version (e.g., 1.0.0 → 1.0.1) | `fix: correct JSON serialization` |
+| `type!:` or `BREAKING CHANGE` | Increments **major** version (e.g., 1.0.0 → 2.0.0) | `feat!: remove legacy option` |
+
 ### Default Behavior (No Special Syntax Required)
 
 For most commits, you don't need any special syntax. Just write your commit message normally:
