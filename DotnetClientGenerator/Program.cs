@@ -3,7 +3,7 @@ using DotnetClientGenerator;
 
 var inputOption = new Option<string>(
     "--input",
-    "Path to the OpenAPI specification file or URL")
+    "This is the path to the OpenAPI specification file or URL")
 {
     IsRequired = true
 };
