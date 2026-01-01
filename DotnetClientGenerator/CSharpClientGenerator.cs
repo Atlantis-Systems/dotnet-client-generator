@@ -17,7 +17,6 @@ public class CSharpClientGenerator
         sb.AppendLine($"namespace {namespaceName};");
         sb.AppendLine();
 
-        // Generate model classes first
         GenerateModelClasses(sb, spec.Schemas);
 
         sb.AppendLine($"public class {className}");
@@ -356,10 +355,4 @@ public class CSharpClientGenerator
 
         return string.Empty;
     }
-}
-
-public class ClientGeneratorOptions
-{
-    public string? ClassName { get; set; }
-    public string? Namespace { get; set; }
 }

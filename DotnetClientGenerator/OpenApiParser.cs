@@ -5,7 +5,6 @@ namespace DotnetClientGenerator;
 
 public class OpenApiParser
 {
-    // Compiled regex for better performance when parsing multiple specs
     private static readonly System.Text.RegularExpressions.Regex OpenApi31VersionRegex = new(
         @"""openapi""\s*:\s*""3\.1\.\d+""",
         System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled
@@ -77,22 +76,4 @@ public class OpenApiParser
             Schemas = document.Components?.Schemas ?? new Dictionary<string, OpenApiSchema>()
         };
     }
-}
-
-public class ParsedApiSpec
-{
-    public OpenApiInfo Info { get; set; } = new();
-    public List<ApiEndpoint> Endpoints { get; set; } = new();
-    public IDictionary<string, OpenApiSchema> Schemas { get; set; } = new Dictionary<string, OpenApiSchema>();
-}
-
-public class ApiEndpoint
-{
-    public string Path { get; set; } = string.Empty;
-    public string Method { get; set; } = string.Empty;
-    public string? OperationId { get; set; }
-    public OpenApiRequestBody? RequestBody { get; set; }
-    public OpenApiResponses Responses { get; set; } = new();
-    public List<string> Tags { get; set; } = new();
-    public List<OpenApiParameter> Parameters { get; set; } = new();
 }
