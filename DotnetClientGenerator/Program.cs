@@ -44,7 +44,14 @@ var rootCommand = new RootCommand("A tool for generating C# API clients from Ope
 };
 
 rootCommand.SetHandler(async (input, output, className, namespaceName, watch) =>
+rootCommand.SetAction(async (parseResult, _) =>
 {
+    var input = parseResult.GetValue(inputOption)!;
+    var output = parseResult.GetValue(outputOption)!;
+    var className = parseResult.GetValue(classNameOption)!;
+    var namespaceName = parseResult.GetValue(namespaceOption)!;
+    var watch = parseResult.GetValue(watchOption);
+    
     try
     {
         await GenerateClient(input, output, className, namespaceName);
@@ -53,7 +60,7 @@ rootCommand.SetHandler(async (input, output, className, namespaceName, watch) =>
         {
             Console.WriteLine($"👀 Watching {input} for changes...");
             
-            using var watcher = new FileSystemWatcher(Path.GetDirectoryName(Path.GetFullPath(input)) ?? ".", Path.GetFileName(input));
+            using FileSystemWatcher watcher = new FileSystemWatcher(Path.GetDirectoryName(Path.GetFullPath(input)) ?? ".", Path.GetFileName(input));
             watcher.Changed += async (_, _) =>
             {
                 Console.WriteLine("🔄 File changed, regenerating...");
@@ -81,20 +88,21 @@ static async Task GenerateClient(string input, string output, string className, 
     Console.WriteLine($"📄 Output: {output}");
 
     Console.WriteLine("📖 Parsing OpenAPI specification...");
-    var parser = new OpenApiParser();
-    var spec = parser.ParseSpecification(input);
+    OpenApiParser parser = new();
+    ParsedApiSpec spec = await parser.ParseSpecificationAsync(input);
 
     Console.WriteLine($"🏗️  Generating code for {spec.Schemas.Count} models and {spec.Endpoints.Count} endpoints...");
-    var generator = new CSharpClientGenerator();
-    var options = new ClientGeneratorOptions
+    CSharpClientGenerator generator = new();
+    
+    ClientGeneratorOptions options = new()
     {
         ClassName = className,
         Namespace = namespaceName
     };
 
-    var clientCode = generator.GenerateClient(spec, options);
+    string clientCode = generator.GenerateClient(spec, options);
 
-var outputDir = Path.GetDirectoryName(output)!;
+    string outputDir = Path.GetDirectoryName(output)!;
     if (!string.IsNullOrEmpty(outputDir) && !Directory.Exists(outputDir))
     {
         Console.WriteLine($"📁 Creating output directory: {outputDir}");
