@@ -151,6 +151,33 @@ dotnet run --project DotnetClientGenerator -- --input sample-openapi.json --outp
 dotnet pack
 ```
 
+## Versioning
+
+This project uses [GitVersion](https://gitversion.net/) for semantic versioning. By default, commits to the `main` branch increment the patch version, and commits to the `develop` branch increment the minor version.
+
+### Controlling Version Increments via Commit Messages
+
+You can override the default increment by including one of the following keywords in your commit message:
+
+| Keyword | Effect | Example |
+|---------|--------|---------|
+| `+semver: major` or `+semver: breaking` | Increments major version (e.g., 1.0.0 → 2.0.0) | `Add breaking API change +semver: major` |
+| `+semver: minor` or `+semver: feature` | Increments minor version (e.g., 1.0.0 → 1.1.0) | `Add new feature +semver: minor` |
+| `+semver: patch` or `+semver: fix` | Increments patch version (e.g., 1.0.0 → 1.0.1) | `Fix bug +semver: patch` |
+
+### Example Commit Messages
+
+```bash
+# Increment minor version for a new feature
+git commit -m "Add support for OpenAPI 3.1 +semver: minor"
+
+# Increment major version for breaking changes
+git commit -m "Rename output parameter +semver: breaking"
+
+# Increment patch version (default for main branch)
+git commit -m "Fix JSON serialization issue +semver: fix"
+```
+
 ## Contributing
 
 1. Fork the repository
