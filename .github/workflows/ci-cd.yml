@@ -67,7 +67,7 @@ jobs:
     - name: Install GitVersion
       uses: gittools/actions/gitversion/setup@v0.10.2
       with:
-        versionSpec: '5.x'
+        versionSpec: '6.x'
         
     - name: Determine Version
       id: gitversion
@@ -82,10 +82,10 @@ jobs:
       run: dotnet restore ${{ env.PROJECT_PATH }}
       
     - name: Build
-      run: dotnet build ${{ env.PROJECT_PATH }} --no-restore --configuration Release -p:Version=${{ steps.gitversion.outputs.nuGetVersionV2 }}
+      run: dotnet build ${{ env.PROJECT_PATH }} --no-restore --configuration Release -p:Version=${{ steps.gitversion.outputs.semVer }}
       
     - name: Pack
-      run: dotnet pack ${{ env.PROJECT_PATH }} --no-build --configuration Release -p:PackageVersion=${{ steps.gitversion.outputs.nuGetVersionV2 }}
+      run: dotnet pack ${{ env.PROJECT_PATH }} --no-build --configuration Release -p:PackageVersion=${{ steps.gitversion.outputs.semVer }}
       
     - name: Publish to NuGet
       run: dotnet nuget push DotnetClientGenerator/bin/Release/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
