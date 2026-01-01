@@ -151,6 +151,42 @@ dotnet run --project DotnetClientGenerator -- --input sample-openapi.json --outp
 dotnet pack
 ```
 
+## Versioning
+
+This project uses [GitVersion](https://gitversion.net/) for semantic versioning. By default, commits to the `main` branch increment the patch version, and commits to the `develop` branch increment the minor version.
+
+### Default Behavior (No Special Syntax Required)
+
+For most commits, you don't need any special syntax. Just write your commit message normally:
+
+```bash
+# Normal commit on main branch → increments patch version (1.0.0 → 1.0.1)
+git commit -m "Fix JSON serialization issue"
+
+# Normal commit on develop branch → increments minor version (1.0.0 → 1.1.0)
+git commit -m "Add new endpoint support"
+```
+
+### Overriding Version Increments (Optional)
+
+If you need to override the default increment, you can add one of these optional keywords anywhere in your commit message:
+
+| Keyword | Effect | Example |
+|---------|--------|---------|
+| `+semver: major` or `+semver: breaking` | Increments major version (e.g., 1.0.0 → 2.0.0) | `Add breaking API change +semver: major` |
+| `+semver: minor` or `+semver: feature` | Increments minor version (e.g., 1.0.0 → 1.1.0) | `Add new feature +semver: minor` |
+| `+semver: patch` or `+semver: fix` | Increments patch version (e.g., 1.0.0 → 1.0.1) | `Fix bug +semver: patch` |
+
+### Example: When to Use Override Keywords
+
+```bash
+# On main branch, force a minor version bump instead of patch
+git commit -m "Add support for OpenAPI 3.1 +semver: minor"
+
+# On any branch, force a major version bump for breaking changes
+git commit -m "Rename output parameter +semver: breaking"
+```
+
 ## Contributing
 
 1. Fork the repository
