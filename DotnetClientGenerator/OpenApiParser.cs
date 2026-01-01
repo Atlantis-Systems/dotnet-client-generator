@@ -49,7 +49,6 @@ public class OpenApiParser
                         OperationId = operation.Value.OperationId,
                         RequestBody = operation.Value.RequestBody as OpenApiRequestBody,
                         Responses = operation.Value.Responses ?? new OpenApiResponses(),
-                        Tags = operation.Value.Tags?.Select(t => t.Name).ToList() ?? new List<string?>(),
                         Parameters = operation.Value.Parameters?.ToList() ?? new List<IOpenApiParameter>()
                     };
                     endpoints.Add(endpoint);

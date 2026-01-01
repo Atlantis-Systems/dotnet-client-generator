@@ -1,5 +1,5 @@
-using Microsoft.OpenApi.Models;
 using System.Text;
+using Microsoft.OpenApi;
 
 namespace DotnetClientGenerator;
 
@@ -7,9 +7,9 @@ public class CSharpClientGenerator
 {
     public string GenerateClient(ParsedApiSpec spec, ClientGeneratorOptions options)
     {
-        var sb = new StringBuilder();
-        var className = options.ClassName ?? "ApiClient";
-        var namespaceName = options.Namespace ?? "GeneratedClient";
+        StringBuilder sb = new();
+        string className = options.ClassName ?? "ApiClient";
+        string namespaceName = options.Namespace ?? "GeneratedClient";
 
         sb.AppendLine("using System.Text.Json;");
         sb.AppendLine("using System.Text;");
@@ -82,8 +82,8 @@ public class CSharpClientGenerator
 
     private void GenerateEndpointMethod(StringBuilder sb, ApiEndpoint endpoint)
     {
-        var methodName = GenerateMethodName(endpoint);
-        var httpMethod = endpoint.Method.ToUpper() switch
+        string methodName = GenerateMethodName(endpoint);
+        string httpMethod = endpoint.Method.ToUpper() switch
         {
             "GET" => "HttpMethod.Get",
             "POST" => "HttpMethod.Post",
@@ -93,52 +93,54 @@ public class CSharpClientGenerator
             _ => "HttpMethod.Get"
         };
 
-        var hasRequestBody = endpoint.RequestBody?.Content?.Any() == true;
-        var hasResponse = endpoint.Responses.Any(r => r.Key.StartsWith("2"));
+        bool hasRequestBody = endpoint.RequestBody?.Content?.Any() == true;
+        bool hasResponse = endpoint.Responses.Any(r => r.Key.StartsWith("2"));
 
-        var parameters = new List<string>();
-        var pathParameters = new List<string>();
+        List<string> parameters = new List<string>();
+        List<string> pathParameters = new List<string>();
 
         foreach (var parameter in endpoint.Parameters)
         {
-            if (parameter.In == ParameterLocation.Path)
+            string paramName = parameter.Name ?? "param";
+            switch (parameter)
             {
-                pathParameters.Add(parameter.Name);
-                parameters.Add($"{GetCSharpType(parameter.Schema)} {ToCamelCase(parameter.Name)}");
-            }
-            else if (parameter.In == ParameterLocation.Query)
-            {
-                parameters.Add($"{GetCSharpType(parameter.Schema)}? {ToCamelCase(parameter.Name)} = null");
+                case { In: ParameterLocation.Path }:
+                    pathParameters.Add(paramName);
+                    parameters.Add($"{GetCSharpTypeFromSchema(parameter.Schema)} {ToCamelCase(paramName)}");
+                    break;
+                case { In: ParameterLocation.Query }:
+                    parameters.Add($"{GetCSharpTypeFromSchema(parameter.Schema)}? {ToCamelCase(paramName)} = null");
+                    break;
             }
         }
 
         if (hasRequestBody)
         {
-            var requestBodyType = GetRequestBodyType(endpoint.RequestBody);
+            string requestBodyType = GetRequestBodyType(endpoint.RequestBody);
             parameters.Add($"{requestBodyType} body");
         }
 
-        var parametersString = string.Join(", ", parameters);
-        var returnType = GetResponseType(endpoint.Responses);
+        string parametersString = string.Join(", ", parameters);
+        string returnType = GetResponseType(endpoint.Responses);
 
         sb.AppendLine($"    public async {returnType} {methodName}({parametersString})");
         sb.AppendLine("    {");
 
-        var path = endpoint.Path;
-        foreach (var pathParam in pathParameters)
-        {
-            path = path.Replace($"{{{pathParam}}}", $"{{{ToCamelCase(pathParam)}}}");
-        }
+        string path = pathParameters.Aggregate(endpoint.Path, (current, pathParam) => current.Replace($"{{{pathParam}}}", $"{{{ToCamelCase(pathParam)}}}"));
 
-        var queryParams = endpoint.Parameters.Where(p => p.In == ParameterLocation.Query).ToList();
+        List<IOpenApiParameter> queryParams = endpoint.Parameters.Where(p => p.In == ParameterLocation.Query).ToList();
         if (queryParams.Any())
         {
             sb.AppendLine("        var queryParams = new List<string>();");
             foreach (var param in queryParams)
             {
-                var paramName = ToCamelCase(param.Name);
+                var paramName = ToCamelCase(param.Name ?? "param");
                 sb.AppendLine($"        if ({paramName} != null)");
-                sb.AppendLine($"            queryParams.Add($\"{param.Name}={{{paramName}}}\");");
+                sb.Append("            queryParams.Add($\"");
+                sb.Append(param.Name);
+                sb.Append("={");
+                sb.Append(paramName);
+                sb.AppendLine("}\");");
             }
             sb.AppendLine($"        var path = \"{path}\" + (queryParams.Any() ? \"?\" + string.Join(\"&\", queryParams) : \"\");");
         }
@@ -147,7 +149,7 @@ public class CSharpClientGenerator
             sb.AppendLine($"        var path = $\"{path}\";");
         }
 
-        var responseModelType = GetResponseModelType(endpoint.Responses);
+        string responseModelType = GetResponseModelType(endpoint.Responses);
         if (hasResponse && !string.IsNullOrEmpty(responseModelType))
         {
             if (hasRequestBody)
@@ -190,22 +192,6 @@ public class CSharpClientGenerator
         return $"{ToPascalCase(endpoint.Method.ToLower())}{cleanPath}";
     }
 
-    private string GetCSharpType(OpenApiSchema? schema)
-    {
-        if (schema == null)
-            return "object";
-
-        return schema.Type switch
-        {
-            "string" => "string",
-            "integer" => "int",
-            "number" => "decimal",
-            "boolean" => "bool",
-            "array" => "object[]",
-            _ => "object"
-        };
-    }
-
     private string ToCamelCase(string input)
     {
         if (string.IsNullOrEmpty(input))
@@ -222,12 +208,15 @@ public class CSharpClientGenerator
         return char.ToUpperInvariant(input[0]) + input[1..];
     }
 
-    private void GenerateModelClasses(StringBuilder sb, IDictionary<string, OpenApiSchema> schemas)
+    private void GenerateModelClasses(StringBuilder sb, IDictionary<string, OpenApiSchema?> schemas)
     {
         foreach (var schema in schemas)
         {
-            GenerateModelClass(sb, schema.Key, schema.Value);
-            sb.AppendLine();
+            if (schema.Value != null)
+            {
+                GenerateModelClass(sb, schema.Key, schema.Value);
+                sb.AppendLine();
+            }
         }
     }
 
@@ -256,55 +245,70 @@ public class CSharpClientGenerator
         sb.AppendLine("}");
     }
 
-    private string GetCSharpTypeFromSchema(OpenApiSchema schema)
+    private string GetCSharpTypeFromSchema(IOpenApiSchema? schema)
     {
-        if (schema.Reference != null)
+        switch (schema)
         {
-            return schema.Reference.Id;
+            case null:
+            {
+                return "object";
+            }
+            case OpenApiSchemaReference schemaRef:
+                return schemaRef.Reference.Id ?? "object";
         }
 
-        if (schema.Type == "array" && schema.Items != null)
-        {
-            var itemType = GetCSharpTypeFromSchema(schema.Items);
-            return $"List<{itemType}>";
-        }
+        OpenApiSchema? openApiSchema = schema as OpenApiSchema;
+        if (openApiSchema == null)
+            return "object";
 
-        return schema.Type switch
-        {
-            "string" => schema.Format switch
+        if (openApiSchema.Type != JsonSchemaType.Array || openApiSchema.Items == null)
+            return openApiSchema.Type switch
             {
-                "date-time" => "DateTime",
-                "date" => "DateOnly",
-                "time" => "TimeOnly",
-                "uuid" => "Guid",
-                _ => "string"
-            },
-            "integer" => schema.Format switch
-            {
-                "int64" => "long",
-                _ => "int"
-            },
-            "number" => schema.Format switch
-            {
-                "float" => "float",
-                "double" => "double",
-                _ => "decimal"
-            },
-            "boolean" => "bool",
-            "object" => "object",
-            _ => "object"
-        };
+                JsonSchemaType.String => openApiSchema.Format switch
+                {
+                    "date-time" => "DateTime",
+                    "date" => "DateOnly",
+                    "time" => "TimeOnly",
+                    "uuid" => "Guid",
+                    _ => "string"
+                },
+                JsonSchemaType.Integer => openApiSchema.Format switch
+                {
+                    "int64" => "long",
+                    _ => "int"
+                },
+                JsonSchemaType.Number => openApiSchema.Format switch
+                {
+                    "float" => "float",
+                    "double" => "double",
+                    _ => "decimal"
+                },
+                JsonSchemaType.Boolean => "bool",
+                _ => "object"
+            };
+        string itemType = GetCSharpTypeFromSchema(openApiSchema.Items);
+        return $"List<{itemType}>";
+
     }
 
-    private bool IsNullableType(OpenApiSchema schema)
+    private static bool IsNullableType(IOpenApiSchema? schema)
     {
-        return schema.Type switch
+        if (schema == null)
         {
-            "string" => true,
-            "object" => true,
-            "array" => true,
-            _ => false
-        };
+            return false;
+        }
+
+        OpenApiSchema? openApiSchema = schema as OpenApiSchema;
+        return openApiSchema == null
+            ? schema is OpenApiSchemaReference
+            : // References are nullable
+            openApiSchema.Type switch
+            {
+                JsonSchemaType.String => true,
+                JsonSchemaType.Object => true,
+                JsonSchemaType.Array => true,
+                _ => false
+            };
     }
 
     private string GetRequestBodyType(OpenApiRequestBody? requestBody)
@@ -312,28 +316,20 @@ public class CSharpClientGenerator
         if (requestBody?.Content == null)
             return "object";
 
-        var jsonContent = requestBody.Content.FirstOrDefault(c => c.Key.Contains("json"));
-        if (jsonContent.Value?.Schema?.Reference != null)
+        KeyValuePair<string, IOpenApiMediaType> jsonContent = requestBody.Content.FirstOrDefault(c => c.Key.Contains("json"));
+        if (jsonContent.Value?.Schema == null) return "object";
+        if (jsonContent.Value.Schema is OpenApiSchemaReference schemaRef)
         {
-            return jsonContent.Value.Schema.Reference.Id;
+            return schemaRef.Reference.Id ?? "object";
         }
 
-        if (jsonContent.Value?.Schema != null)
-        {
-            return GetCSharpTypeFromSchema(jsonContent.Value.Schema);
-        }
-
-        return "object";
+        return GetCSharpTypeFromSchema(jsonContent.Value.Schema);
     }
 
     private string GetResponseType(OpenApiResponses responses)
     {
-        var responseModelType = GetResponseModelType(responses);
-        if (!string.IsNullOrEmpty(responseModelType))
-        {
-            return $"Task<{responseModelType}?>";
-        }
-        return "Task";
+        string responseModelType = GetResponseModelType(responses);
+        return !string.IsNullOrEmpty(responseModelType) ? $"Task<{responseModelType}?>" : "Task";
     }
 
     private string GetResponseModelType(OpenApiResponses responses)
@@ -342,17 +338,14 @@ public class CSharpClientGenerator
         if (successResponse.Value?.Content == null)
             return string.Empty;
 
-        var jsonContent = successResponse.Value.Content.FirstOrDefault(c => c.Key.Contains("json"));
-        if (jsonContent.Value?.Schema?.Reference != null)
+        KeyValuePair<string, IOpenApiMediaType> jsonContent = successResponse.Value.Content.FirstOrDefault(c => c.Key.Contains("json"));
+        if (jsonContent.Value?.Schema == null) return string.Empty;
+        if (jsonContent.Value.Schema is OpenApiSchemaReference schemaRef)
         {
-            return jsonContent.Value.Schema.Reference.Id;
+            return schemaRef.Reference.Id ?? string.Empty;
         }
 
-        if (jsonContent.Value?.Schema != null)
-        {
-            return GetCSharpTypeFromSchema(jsonContent.Value.Schema);
-        }
+        return GetCSharpTypeFromSchema(jsonContent.Value.Schema);
 
-        return string.Empty;
     }
 }
