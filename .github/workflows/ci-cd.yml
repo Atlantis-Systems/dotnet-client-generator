@@ -9,7 +9,7 @@ on:
     types: [ published ]
 
 env:
-  DOTNET_VERSION: '9.0.x'
+  DOTNET_VERSION: '10.0.x'
   PROJECT_PATH: 'DotnetClientGenerator/DotnetClientGenerator.csproj'
 
 jobs:

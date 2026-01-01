@@ -73,7 +73,7 @@ await client.CreateUserAsync(userData);
 
 ## Requirements
 
-- .NET 9.0 or later
+- .NET 10.0 or later
 - OpenAPI 3.0 specification
 
 ## More Information
