@@ -1,9 +1,15 @@
-mode: Mainline
-# Do not use git tags to calculate versions (derive solely from commit history/messages).
-tag-prefix: '^$'
+workflow: TrunkBased/preview1
 
-# Base version when tags are ignored.
+# Start point when not using tags.
 next-version: 1.0.0
+
+# Ignore tags by excluding the TaggedCommit strategy.
+strategies:
+  - Fallback
+  - ConfiguredNextVersion
+  - MergeMessage
+  - VersionInBranchName
+  - Mainline
 # Supports Conventional Commits + optional +semver overrides:
 # - feat: / feat(scope):  -> minor
 # - fix:  / fix(scope):   -> patch
@@ -15,16 +21,11 @@ commit-message-incrementing: Enabled
 branches:
   main:
     regex: ^main$
-    increment: Patch
-    is-mainline: true
-    track-merge-target: true
-    # When true, only the merge commit message affects versioning.
-    # Set to false so Conventional Commits inside the merged branch (feat:/fix:/etc.) drive the increment.
-    prevent-increment-of-merged-branch-version: false
+    increment: None
+    is-main-branch: true
   develop:
     regex: ^develop$
-    increment: Minor
-    is-mainline: false
+    increment: None
   feature:
     regex: ^feature[/-]|^features[/-]|^copilot[/-]
     increment: Inherit
