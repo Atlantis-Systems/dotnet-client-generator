@@ -1,25 +1,27 @@
-mode: Mainline
-next-version: 1.0.0
+mode: ContinuousDelivery
 # Supports Conventional Commits + optional +semver overrides:
 # - feat: / feat(scope):  -> minor
 # - fix:  / fix(scope):   -> patch
 # - type!: / BREAKING CHANGE -> major
-major-version-bump-message: '(?i)\+semver:\s?(breaking|major)|^(\w+)(\([^)]+\))?!:|BREAKING CHANGE'
-minor-version-bump-message: '(?i)\+semver:\s?(feature|minor)|^feat(\([^)]+\))?:'
-patch-version-bump-message: '(?i)\+semver:\s?(fix|patch)|^fix(\([^)]+\))?:'
+major-version-bump-message: '(?i)(\+semver:\s?(breaking|major)|^(\w+)(\([^)]+\))?!:|BREAKING CHANGE)'
+minor-version-bump-message: '(?i)(\+semver:\s?(feature|minor)|^feat(\([^)]+\))?:)'
+patch-version-bump-message: '(?i)(\+semver:\s?(fix|patch)|^fix(\([^)]+\))?:)'
 commit-message-incrementing: Enabled
 branches:
   main:
     regex: ^main$
     increment: Patch
     is-mainline: true
-    prevent-increment-of-merged-branch-version: true
+    track-merge-target: true
+    # When true, only the merge commit message affects versioning.
+    # Set to false so Conventional Commits inside the merged branch (feat:/fix:/etc.) drive the increment.
+    prevent-increment-of-merged-branch-version: false
   develop:
     regex: ^develop$
     increment: Minor
     is-mainline: false
   feature:
-    regex: ^feature[/-]|^copilot[/-]
+    regex: ^feature[/-]|^features[/-]|^copilot[/-]
     increment: Inherit
     source-branches: ['main', 'develop']
 ignore:
