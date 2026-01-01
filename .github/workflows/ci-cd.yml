@@ -55,6 +55,7 @@ jobs:
   publish:
     needs: build-and-test
     runs-on: ubuntu-latest
+    # Only publish on pushes to main branch, not on PRs or other branches
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     
     steps:
