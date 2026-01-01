@@ -24,13 +24,16 @@ public class OpenApiParser
             specContent = File.ReadAllText(specPath);
         }
 
-        // Handle OpenAPI 3.1.x specs by temporarily converting version to 3.0.x for parsing
+        // Handle OpenAPI 3.1.x specs by temporarily converting version to 3.0.x for parsing.
         // The Microsoft.OpenApi.Readers library versions 1.x do not officially support 3.1.x,
         // but the structural differences are minimal enough that most specs can be parsed
         // by treating them as 3.0.x documents.
-        // Note: This workaround is designed for JSON format specifications. YAML specs should
-        // be supported by the OpenApiStringReader, but may have different formatting.
-        // Only performs replacement if a 3.1.x version is detected for efficiency.
+        // 
+        // Implementation notes:
+        // - The string check is a performance optimization to avoid regex on 3.0.x specs
+        // - The regex pattern matches both JSON and YAML formats
+        // - Some advanced OpenAPI 3.1.x features may not be fully supported (e.g., JSON Schema 2020-12)
+        // - Only performs replacement if a 3.1.x version is detected
         if (specContent.Contains("\"openapi\"") && specContent.Contains("3.1."))
         {
             specContent = OpenApi31VersionRegex.Replace(
