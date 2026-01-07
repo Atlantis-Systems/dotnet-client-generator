@@ -47,7 +47,7 @@ jobs:
       run: dotnet pack ${{ env.PROJECT_PATH }} --no-build --configuration Release
       
     - name: Upload build artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: nuget-package
         path: DotnetClientGenerator/bin/Release/*.nupkg
@@ -91,7 +91,7 @@ jobs:
       run: dotnet nuget push DotnetClientGenerator/bin/Release/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
       
     - name: Upload release artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: release-package
         path: DotnetClientGenerator/bin/Release/*.nupkg
