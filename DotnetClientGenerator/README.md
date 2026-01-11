@@ -26,6 +26,8 @@ dotnet-client-generator --input openapi.json --output ApiClient.cs
 - ✅ Support for URLs and local files
 - ✅ Query parameters and path parameters
 - ✅ Request body handling
+- ✅ Type-safe response handling with pattern matching
+- ✅ Optional interface generation for dependency injection
 
 ## Usage Examples
 
@@ -48,28 +50,61 @@ dotnet-client-generator \
 dotnet-client-generator -i openapi.json -o ApiClient.cs --watch
 ```
 
+### Generate with Interface
+```bash
+dotnet-client-generator -i openapi.json -o ApiClient.cs --generate-interface
+```
+
 ## Generated Client Usage
 
 ```csharp
 // Dependency injection setup
-services.AddHttpClient<ApiClient>();
+services.AddHttpClient<IApiClient, ApiClient>();
 
 // Manual setup
-var httpClient = new HttpClient();
-var client = new ApiClient(httpClient, "https://api.example.com");
+var httpClient = new HttpClient { BaseAddress = new Uri("https://api.example.com") };
+var client = new ApiClient(httpClient);
 
-// Use the client
-var result = await client.GetUsersAsync();
-await client.CreateUserAsync(userData);
+// Use the client with pattern matching
+var response = await client.GetUser(userId);
+
+switch (response)
+{
+    case GetUserResponse.Ok ok:
+        Console.WriteLine($"Found user: {ok.Value.Name}");
+        break;
+    case GetUserResponse.NotFound:
+        Console.WriteLine("User not found");
+        break;
+    case GetUserResponse.BadRequest:
+        Console.WriteLine("Invalid request");
+        break;
+    case GetUserResponse.Unexpected unexpected:
+        Console.WriteLine($"Unexpected status: {unexpected.StatusCode}");
+        break;
+}
+
+// Or use switch expressions
+var message = response switch
+{
+    GetUserResponse.Ok { Value: var user } => $"Hello, {user.Name}!",
+    GetUserResponse.NotFound => "User not found",
+    GetUserResponse.Unauthorized => "Please log in",
+    GetUserResponse.Unexpected { StatusCode: var code } => $"Error: {code}",
+    _ => "Unknown response"
+};
 ```
 
 ## Command Line Options
 
-- `--input, -i`: OpenAPI spec file path or URL (required)
-- `--output, -o`: Output C# file path (required) 
-- `--class-name, -c`: Generated class name (default: "ApiClient")
-- `--namespace, -n`: Generated namespace (default: "GeneratedClient")
-- `--watch, -w`: Watch for changes and regenerate
+| Option | Short | Description | Default |
+|--------|-------|-------------|---------|
+| `--input` | `-i` | OpenAPI spec file path or URL | (required) |
+| `--output` | `-o` | Output C# file path | (required) |
+| `--class-name` | `-c` | Generated class name | `ApiClient` |
+| `--namespace` | `-n` | Generated namespace | `GeneratedClient` |
+| `--generate-interface` | | Generate interface for the client | `false` |
+| `--watch` | `-w` | Watch for changes and regenerate | `false` |
 
 ## Requirements
 
