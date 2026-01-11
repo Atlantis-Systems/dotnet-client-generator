@@ -18,21 +18,33 @@ public class CSharpClientGenerator
 
         sb.AppendLine("using System.Text.Json;");
         sb.AppendLine("using System.Text;");
+        sb.AppendLine("using System.Net;");
         sb.AppendLine();
         sb.AppendLine($"namespace {namespaceName};");
         sb.AppendLine();
 
         GenerateModelClasses(sb, spec.Schemas);
 
-        sb.AppendLine($"public class {className}");
+        // Generate response types for each endpoint
+        foreach (var endpoint in spec.Endpoints)
+        {
+            GenerateEndpointResponseType(sb, endpoint);
+        }
+
+        if (options.GenerateInterface)
+        {
+            GenerateInterface(sb, className, spec.Endpoints);
+        }
+
+        string interfaceImplementation = options.GenerateInterface ? $" : I{className}" : "";
+        sb.AppendLine($"public class {className}{interfaceImplementation}");
         sb.AppendLine("{");
         sb.AppendLine("    private readonly HttpClient _httpClient;");
-        sb.AppendLine("    private readonly string _baseUrl;");
+        sb.AppendLine("    private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };");
         sb.AppendLine();
-        sb.AppendLine($"    public {className}(HttpClient httpClient, string baseUrl = \"\")");
+        sb.AppendLine($"    public {className}(HttpClient httpClient)");
         sb.AppendLine("    {");
         sb.AppendLine("        _httpClient = httpClient;");
-        sb.AppendLine("        _baseUrl = baseUrl;");
         sb.AppendLine("    }");
         sb.AppendLine();
 
@@ -41,53 +53,123 @@ public class CSharpClientGenerator
             GenerateEndpointMethod(sb, endpoint);
         }
 
-        sb.AppendLine("    private async Task<T?> SendRequestAsync<T>(string path, HttpMethod method, object? body = null)");
-        sb.AppendLine("    {");
-        sb.AppendLine("        var request = new HttpRequestMessage(method, _baseUrl + path);");
-        sb.AppendLine();
-        sb.AppendLine("        if (body != null)");
-        sb.AppendLine("        {");
-        sb.AppendLine("            var json = JsonSerializer.Serialize(body);");
-        sb.AppendLine("            request.Content = new StringContent(json, Encoding.UTF8, \"application/json\");");
-        sb.AppendLine("        }");
-        sb.AppendLine();
-        sb.AppendLine("        var response = await _httpClient.SendAsync(request);");
-        sb.AppendLine("        response.EnsureSuccessStatusCode();");
-        sb.AppendLine();
-        sb.AppendLine("        var responseContent = await response.Content.ReadAsStringAsync();");
-        sb.AppendLine("        ");
-        sb.AppendLine("        if (string.IsNullOrEmpty(responseContent))");
-        sb.AppendLine("            return default;");
-        sb.AppendLine();
-        sb.AppendLine("        return JsonSerializer.Deserialize<T>(responseContent, new JsonSerializerOptions");
-        sb.AppendLine("        {");
-        sb.AppendLine("            PropertyNameCaseInsensitive = true");
-        sb.AppendLine("        });");
-        sb.AppendLine("    }");
-        sb.AppendLine();
-
-        sb.AppendLine("    private async Task SendRequestAsync(string path, HttpMethod method, object? body = null)");
-        sb.AppendLine("    {");
-        sb.AppendLine("        var request = new HttpRequestMessage(method, _baseUrl + path);");
-        sb.AppendLine();
-        sb.AppendLine("        if (body != null)");
-        sb.AppendLine("        {");
-        sb.AppendLine("            var json = JsonSerializer.Serialize(body);");
-        sb.AppendLine("            request.Content = new StringContent(json, Encoding.UTF8, \"application/json\");");
-        sb.AppendLine("        }");
-        sb.AppendLine();
-        sb.AppendLine("        var response = await _httpClient.SendAsync(request);");
-        sb.AppendLine("        response.EnsureSuccessStatusCode();");
-        sb.AppendLine("    }");
-
         sb.AppendLine("}");
 
         return sb.ToString();
     }
 
+    private void GenerateEndpointResponseType(StringBuilder sb, ApiEndpoint endpoint)
+    {
+        string methodName = GenerateMethodName(endpoint);
+        string responseTypeName = $"{methodName}Response";
+
+        sb.AppendLine($"public abstract record {responseTypeName}");
+        sb.AppendLine("{");
+
+        foreach (var response in endpoint.Responses)
+        {
+            string statusName = GetStatusName(response.Key);
+            string? responseModelType = GetResponseModelTypeFromResponse(response.Value);
+
+            if (!string.IsNullOrEmpty(responseModelType))
+            {
+                sb.AppendLine($"    public sealed record {statusName}({responseModelType} Value) : {responseTypeName};");
+            }
+            else
+            {
+                sb.AppendLine($"    public sealed record {statusName} : {responseTypeName};");
+            }
+        }
+
+        // Add Unexpected case for handling undefined status codes
+        sb.AppendLine($"    public sealed record Unexpected(HttpStatusCode StatusCode, string Content) : {responseTypeName};");
+
+        sb.AppendLine("}");
+        sb.AppendLine();
+    }
+
+    private string GetStatusName(string statusCode)
+    {
+        return statusCode switch
+        {
+            "200" => "Ok",
+            "201" => "Created",
+            "202" => "Accepted",
+            "204" => "NoContent",
+            "400" => "BadRequest",
+            "401" => "Unauthorized",
+            "403" => "Forbidden",
+            "404" => "NotFound",
+            "409" => "Conflict",
+            "422" => "UnprocessableEntity",
+            "500" => "InternalServerError",
+            "502" => "BadGateway",
+            "503" => "ServiceUnavailable",
+            _ => $"Status{statusCode}"
+        };
+    }
+
+    private string? GetResponseModelTypeFromResponse(IOpenApiResponse? response)
+    {
+        if (response?.Content == null)
+            return null;
+
+        var jsonContent = response.Content.FirstOrDefault(c => c.Key.Contains("json"));
+        if (jsonContent.Value?.Schema == null) 
+            return null;
+        
+        if (jsonContent.Value.Schema is OpenApiSchemaReference schemaRef)
+            return schemaRef.Reference.Id;
+
+        return GetCSharpTypeFromSchema(jsonContent.Value.Schema);
+    }
+
+    private void GenerateInterface(StringBuilder sb, string className, List<ApiEndpoint> endpoints)
+    {
+        sb.AppendLine($"public interface I{className}");
+        sb.AppendLine("{");
+
+        foreach (var endpoint in endpoints)
+        {
+            string methodName = GenerateMethodName(endpoint);
+            bool hasRequestBody = endpoint.RequestBody?.Content?.Any() == true;
+
+            List<string> parameters = new List<string>();
+
+            foreach (var parameter in endpoint.Parameters)
+            {
+                string paramName = parameter.Name ?? "param";
+                switch (parameter)
+                {
+                    case { In: ParameterLocation.Path }:
+                        parameters.Add($"{GetCSharpTypeFromSchema(parameter.Schema)} {ToCamelCase(paramName)}");
+                        break;
+                    case { In: ParameterLocation.Query }:
+                        parameters.Add($"{GetCSharpTypeFromSchema(parameter.Schema)}? {ToCamelCase(paramName)} = null");
+                        break;
+                }
+            }
+
+            if (hasRequestBody)
+            {
+                string requestBodyType = GetRequestBodyType(endpoint.RequestBody);
+                parameters.Add($"{requestBodyType} body");
+            }
+
+            string parametersString = string.Join(", ", parameters);
+            string returnType = $"Task<{methodName}Response>";
+
+            sb.AppendLine($"    {returnType} {methodName}({parametersString});");
+        }
+
+        sb.AppendLine("}");
+        sb.AppendLine();
+    }
+
     private void GenerateEndpointMethod(StringBuilder sb, ApiEndpoint endpoint)
     {
         string methodName = GenerateMethodName(endpoint);
+        string responseTypeName = $"{methodName}Response";
         string httpMethod = endpoint.Method.ToUpper() switch
         {
             "GET" => "HttpMethod.Get",
@@ -99,7 +181,6 @@ public class CSharpClientGenerator
         };
 
         bool hasRequestBody = endpoint.RequestBody?.Content?.Any() == true;
-        bool hasResponse = endpoint.Responses.Any(r => r.Key.StartsWith("2"));
 
         List<string> parameters = new List<string>();
         List<string> pathParameters = new List<string>();
@@ -126,9 +207,8 @@ public class CSharpClientGenerator
         }
 
         string parametersString = string.Join(", ", parameters);
-        string returnType = GetResponseType(endpoint.Responses);
 
-        sb.AppendLine($"    public async {returnType} {methodName}({parametersString})");
+        sb.AppendLine($"    public async Task<{responseTypeName}> {methodName}({parametersString})");
         sb.AppendLine("    {");
 
         string path = pathParameters.Aggregate(endpoint.Path, (current, pathParam) => current.Replace($"{{{pathParam}}}", $"{{{ToCamelCase(pathParam)}}}"));
@@ -154,30 +234,38 @@ public class CSharpClientGenerator
             sb.AppendLine($"        var path = $\"{path}\";");
         }
 
-        string responseModelType = GetResponseModelType(endpoint.Responses);
-        if (hasResponse && !string.IsNullOrEmpty(responseModelType))
+        sb.AppendLine();
+        sb.AppendLine("        using var request = new HttpRequestMessage(" + httpMethod + ", path);");
+        
+        if (hasRequestBody)
         {
-            if (hasRequestBody)
-            {
-                sb.AppendLine($"        return await SendRequestAsync<{responseModelType}>(path, {httpMethod}, body);");
-            }
-            else
-            {
-                sb.AppendLine($"        return await SendRequestAsync<{responseModelType}>(path, {httpMethod});");
-            }
+            sb.AppendLine("        request.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, \"application/json\");");
         }
-        else
+
+        sb.AppendLine();
+        sb.AppendLine("        using var response = await _httpClient.SendAsync(request);");
+        sb.AppendLine("        var content = await response.Content.ReadAsStringAsync();");
+        sb.AppendLine();
+        sb.AppendLine("        return (int)response.StatusCode switch");
+        sb.AppendLine("        {");
+
+        foreach (var response in endpoint.Responses)
         {
-            if (hasRequestBody)
+            string statusName = GetStatusName(response.Key);
+            string? responseModelType = GetResponseModelTypeFromResponse(response.Value);
+
+            if (!string.IsNullOrEmpty(responseModelType))
             {
-                sb.AppendLine($"        await SendRequestAsync(path, {httpMethod}, body);");
+                sb.AppendLine($"            {response.Key} => new {responseTypeName}.{statusName}(JsonSerializer.Deserialize<{responseModelType}>(content, JsonOptions)!),");
             }
             else
             {
-                sb.AppendLine($"        await SendRequestAsync(path, {httpMethod});");
+                sb.AppendLine($"            {response.Key} => new {responseTypeName}.{statusName}(),");
             }
         }
 
+        sb.AppendLine($"            _ => new {responseTypeName}.Unexpected(response.StatusCode, content)");
+        sb.AppendLine("        };");
         sb.AppendLine("    }");
         sb.AppendLine();
     }
@@ -334,7 +422,7 @@ public class CSharpClientGenerator
     private string GetResponseType(OpenApiResponses responses)
     {
         string responseModelType = GetResponseModelType(responses);
-        return !string.IsNullOrEmpty(responseModelType) ? $"Task<{responseModelType}?>" : "Task";
+        return !string.IsNullOrEmpty(responseModelType) ? $"Task<ApiResponse<{responseModelType}>>" : "Task<ApiResponse>";
     }
 
     private string GetResponseModelType(OpenApiResponses responses)

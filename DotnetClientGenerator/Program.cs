@@ -30,12 +30,18 @@ Option<bool> watchOption = new("--watch", "-w")
     Description = "Watch the input file for changes and regenerate automatically"
 };
 
+Option<bool> interfaceOption = new("--generate-interface", "-g")
+{
+    Description = "Generate an interface for the client class"
+};
+
 RootCommand rootCommand = new("A tool for generating C# API clients from OpenAPI specifications");
 rootCommand.Options.Add(inputOption);
 rootCommand.Options.Add(outputOption);
 rootCommand.Options.Add(classNameOption);
 rootCommand.Options.Add(namespaceOption);
 rootCommand.Options.Add(watchOption);
+rootCommand.Options.Add(interfaceOption);
 
 rootCommand.SetAction(async (parseResult, _) =>
 {
@@ -44,10 +50,11 @@ rootCommand.SetAction(async (parseResult, _) =>
     var className = parseResult.GetValue(classNameOption)!;
     var namespaceName = parseResult.GetValue(namespaceOption)!;
     var watch = parseResult.GetValue(watchOption);
+    var generateInterface = parseResult.GetValue(interfaceOption);
     
     try
     {
-        await GenerateClient(input, output, className, namespaceName);
+        await GenerateClient(input, output, className, namespaceName, generateInterface);
 
         if (watch)
         {
@@ -57,7 +64,7 @@ rootCommand.SetAction(async (parseResult, _) =>
             watcher.Changed += async (_, _) =>
             {
                 Console.WriteLine("🔄 File changed, regenerating...");
-                await GenerateClient(input, output, className, namespaceName);
+                await GenerateClient(input, output, className, namespaceName, generateInterface);
             };
             watcher.EnableRaisingEvents = true;
 
@@ -74,7 +81,7 @@ rootCommand.SetAction(async (parseResult, _) =>
 
 return await rootCommand.Parse(args).InvokeAsync();
 
-static async Task GenerateClient(string input, string output, string className, string namespaceName)
+static async Task GenerateClient(string input, string output, string className, string namespaceName, bool generateInterface)
 {
     Console.WriteLine("🚀 Generating C# API client...");
     Console.WriteLine($"📥 Input: {input}");
@@ -90,7 +97,8 @@ static async Task GenerateClient(string input, string output, string className, 
     ClientGeneratorOptions options = new()
     {
         ClassName = className,
-        Namespace = namespaceName
+        Namespace = namespaceName,
+        GenerateInterface = generateInterface
     };
 
     string clientCode = generator.GenerateClient(spec, options);
