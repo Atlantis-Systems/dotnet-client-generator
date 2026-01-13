@@ -23,7 +23,7 @@ public class CSharpClientGenerator
         sb.AppendLine($"namespace {namespaceName};");
         sb.AppendLine();
 
-        GenerateModelClasses(sb, spec.Schemas);
+        GenerateModelClasses(sb, spec.Schemas, options.GenerateModelInterfaces);
 
         // Generate response types for each endpoint
         foreach (var endpoint in spec.Endpoints)
@@ -301,21 +301,26 @@ public class CSharpClientGenerator
         return char.ToUpperInvariant(input[0]) + input[1..];
     }
 
-    private void GenerateModelClasses(StringBuilder sb, IDictionary<string, OpenApiSchema?> schemas)
+    private void GenerateModelClasses(StringBuilder sb, IDictionary<string, OpenApiSchema?> schemas, bool generateInterfaces)
     {
         foreach (var schema in schemas)
         {
             if (schema.Value != null)
             {
-                GenerateModelClass(sb, schema.Key, schema.Value);
+                if (generateInterfaces)
+                {
+                    GenerateModelInterface(sb, schema.Key, schema.Value);
+                    sb.AppendLine();
+                }
+                GenerateModelClass(sb, schema.Key, schema.Value, generateInterfaces);
                 sb.AppendLine();
             }
         }
     }
 
-    private void GenerateModelClass(StringBuilder sb, string className, OpenApiSchema schema)
+    private void GenerateModelInterface(StringBuilder sb, string className, OpenApiSchema schema)
     {
-        sb.AppendLine($"public class {className}");
+        sb.AppendLine($"public interface I{className}");
         sb.AppendLine("{");
 
         if (schema.Properties != null)
@@ -325,7 +330,33 @@ public class CSharpClientGenerator
                 var propertyName = ToPascalCase(property.Key);
                 var propertyType = GetCSharpTypeFromSchema(property.Value);
                 var isRequired = schema.Required?.Contains(property.Key) == true;
-                
+
+                if (!isRequired && !propertyType.EndsWith("?") && IsNullableType(property.Value))
+                {
+                    propertyType += "?";
+                }
+
+                sb.AppendLine($"    {propertyType} {propertyName} {{ get; }}");
+            }
+        }
+
+        sb.AppendLine("}");
+    }
+
+    private void GenerateModelClass(StringBuilder sb, string className, OpenApiSchema schema, bool generateInterface)
+    {
+        string interfaceImplementation = generateInterface ? $" : I{className}" : "";
+        sb.AppendLine($"public class {className}{interfaceImplementation}");
+        sb.AppendLine("{");
+
+        if (schema.Properties != null)
+        {
+            foreach (var property in schema.Properties)
+            {
+                var propertyName = ToPascalCase(property.Key);
+                var propertyType = GetCSharpTypeFromSchema(property.Value);
+                var isRequired = schema.Required?.Contains(property.Key) == true;
+
                 if (!isRequired && !propertyType.EndsWith("?") && IsNullableType(property.Value))
                 {
                     propertyType += "?";

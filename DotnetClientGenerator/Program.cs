@@ -35,6 +35,11 @@ Option<bool> interfaceOption = new("--generate-interface", "-g")
     Description = "Generate an interface for the client class"
 };
 
+Option<bool> modelInterfacesOption = new("--generate-model-interfaces", "-m")
+{
+    Description = "Generate interfaces for model classes"
+};
+
 RootCommand rootCommand = new("A tool for generating C# API clients from OpenAPI specifications");
 rootCommand.Options.Add(inputOption);
 rootCommand.Options.Add(outputOption);
@@ -42,6 +47,7 @@ rootCommand.Options.Add(classNameOption);
 rootCommand.Options.Add(namespaceOption);
 rootCommand.Options.Add(watchOption);
 rootCommand.Options.Add(interfaceOption);
+rootCommand.Options.Add(modelInterfacesOption);
 
 rootCommand.SetAction(async (parseResult, _) =>
 {
@@ -51,20 +57,21 @@ rootCommand.SetAction(async (parseResult, _) =>
     var namespaceName = parseResult.GetValue(namespaceOption)!;
     var watch = parseResult.GetValue(watchOption);
     var generateInterface = parseResult.GetValue(interfaceOption);
-    
+    var generateModelInterfaces = parseResult.GetValue(modelInterfacesOption);
+
     try
     {
-        await GenerateClient(input, output, className, namespaceName, generateInterface);
+        await GenerateClient(input, output, className, namespaceName, generateInterface, generateModelInterfaces);
 
         if (watch)
         {
             Console.WriteLine($"👀 Watching {input} for changes...");
-            
+
             using FileSystemWatcher watcher = new FileSystemWatcher(Path.GetDirectoryName(Path.GetFullPath(input)) ?? ".", Path.GetFileName(input));
             watcher.Changed += async (_, _) =>
             {
                 Console.WriteLine("🔄 File changed, regenerating...");
-                await GenerateClient(input, output, className, namespaceName, generateInterface);
+                await GenerateClient(input, output, className, namespaceName, generateInterface, generateModelInterfaces);
             };
             watcher.EnableRaisingEvents = true;
 
@@ -81,7 +88,7 @@ rootCommand.SetAction(async (parseResult, _) =>
 
 return await rootCommand.Parse(args).InvokeAsync();
 
-static async Task GenerateClient(string input, string output, string className, string namespaceName, bool generateInterface)
+static async Task GenerateClient(string input, string output, string className, string namespaceName, bool generateInterface, bool generateModelInterfaces)
 {
     Console.WriteLine("🚀 Generating C# API client...");
     Console.WriteLine($"📥 Input: {input}");
@@ -93,12 +100,13 @@ static async Task GenerateClient(string input, string output, string className, 
 
     Console.WriteLine($"🏗️  Generating code for {spec.Schemas.Count} models and {spec.Endpoints.Count} endpoints...");
     CSharpClientGenerator generator = new();
-    
+
     ClientGeneratorOptions options = new()
     {
         ClassName = className,
         Namespace = namespaceName,
-        GenerateInterface = generateInterface
+        GenerateInterface = generateInterface,
+        GenerateModelInterfaces = generateModelInterfaces
     };
 
     string clientCode = generator.GenerateClient(spec, options);

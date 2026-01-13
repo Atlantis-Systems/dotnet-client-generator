@@ -63,6 +63,8 @@ dotnet-client-generator --input openapi.json --output ApiClient.cs --watch
 | `--output` | `-o` | Output file path for generated C# client | Yes |
 | `--class-name` | `-c` | Name of the generated client class | No (default: "ApiClient") |
 | `--namespace` | `-n` | Namespace for the generated client | No (default: "GeneratedClient") |
+| `--generate-interface` | `-g` | Generate an interface for the client class | No |
+| `--generate-model-interfaces` | `-m` | Generate interfaces for model classes | No |
 | `--watch` | `-w` | Watch input file for changes and regenerate | No |
 
 ## Generated Client Features
@@ -77,6 +79,8 @@ The generated C# client includes:
 - **Query Parameters**: Automatic query string building
 - **Path Parameters**: Automatic URL path interpolation
 - **Request Bodies**: JSON serialization for POST/PUT operations
+- **Interface Generation**: Optional generation of interfaces for dependency injection
+- **Model Interfaces**: Optional generation of interfaces for model classes
 
 ## Example Generated Client
 
@@ -130,6 +134,63 @@ var client = new PetStoreClient(httpClient, "https://petstore.swagger.io/v2");
 var pets = await client.ListPets(limit: 10);
 await client.CreatePet(new { name = "Fluffy", tag = "cat" });
 ```
+
+## Interface Generation
+
+### Client Interface
+
+Generate an interface for the client class using `--generate-interface`:
+
+```bash
+dotnet-client-generator -i openapi.json -o ApiClient.cs --generate-interface
+```
+
+This generates:
+
+```csharp
+public interface IApiClient
+{
+    Task<GetUserResponse> GetUser(int userId);
+    // ... other methods
+}
+
+public class ApiClient : IApiClient
+{
+    // ... implementation
+}
+```
+
+### Model Interfaces
+
+Generate interfaces for model classes using `--generate-model-interfaces`:
+
+```bash
+dotnet-client-generator -i openapi.json -o ApiClient.cs --generate-model-interfaces
+```
+
+This generates:
+
+```csharp
+public interface IPet
+{
+    long Id { get; }
+    string Name { get; }
+    string? Tag { get; }
+}
+
+public class Pet : IPet
+{
+    public long Id { get; set; }
+    public string Name { get; set; }
+    public string? Tag { get; set; }
+}
+```
+
+Model interfaces are useful for:
+- Dependency injection and mocking in tests
+- Creating abstraction layers
+- Enforcing read-only contracts
+- Supporting polymorphism in domain models
 
 ## Development
 
